@@ -1,26 +1,21 @@
 Makefile: 
 
-PROJECT_DIR = /d/Git/Image_Processing
+PROJECT_DIR = ~/Git/Image_Processing
 OBJ_DIR = $(PROJECT_DIR)/objs
 
 CC = g++
 
-CC_FLAGS = -O2 #-Dgtest_disable_pthreads=ON 
-LIBS = -lposix
-
-#INCLUDES =
-#LIB_INCLUDES = 
-
-#INC = $(INCLUDES) $(LIBINCLUDES)  
+FLAGS1 = `Magick++-config --cppflags`
+FLAGS2 = `Magick++-config --ldflags --libs`
 
 OBJS = main.o
 
 main.o: main.cpp 
-	$(CC) $(CC_FLAGS)  -c main.cpp
+	$(CC) $(FLAGS1) -c main.cpp $(FLAGS2)
 	mv main.o $(OBJ_DIR)/main.o
 
 exe: clean $(OBJS)
-	$(CC) $(CC_FLAGS) $(LIBS) $(PROJECT_DIR)/a.exe  $(OBJ_DIR)/*.o
+	$(CC) $(FLAGS1) $(OBJ_DIR)/*.o $(FLAGS2)
  
 clean: 
 	rm -f $(OBJ_DIR)/*.o
