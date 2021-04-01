@@ -11,6 +11,7 @@ using namespace Magick;
 
 int main(int argc,char **argv) 
 { 
+  printf("HELLO WORLD!!!\n");
   InitializeMagick(*argv);
 
   // Construct the image object. Seperating image construction from the 
