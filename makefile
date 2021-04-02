@@ -9,11 +9,11 @@ FLAGS2 = `Magick++-config --ldflags --libs`
 OBJS = main.o
 
 main.o: main.cpp 
-	$(CC) $(FLAGS1) -g -c main.cpp $(FLAGS2)
+	$(CC) $(FLAGS1)  -c main.cpp $(FLAGS2)
 	mv main.o objs/main.o
 
 exe: clean $(OBJS)
-	$(CC) $(FLAGS1) -g objs/*.o $(FLAGS2)
+	$(CC) $(FLAGS1) objs/main.o $(FLAGS2)
  
 clean: 
 	rm -f objs/*.o
