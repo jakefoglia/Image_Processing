@@ -22,7 +22,7 @@ Select "Save link as" and save it to "c:\cygwin64\bin" (or wherever your Cygwin 
 Rename the downloaded file and remove the .txt extension so that it's just apt-cyg <br />
 Open your cygwin64 Terminal and enter the following commands <br />
         
-    $ sudo chmmod +x apt-cyg 
+    $ sudo chmod +x apt-cyg 
     $ apt-cyg update
         
 Verify apt-cyg is working with the following command <br />
