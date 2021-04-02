@@ -1,0 +1,20 @@
+{
+    "C_Cpp.default.includePath": [
+        "${default}",
+        "D:\\cygwin64\\usr\\include\\ImageMagick-7",
+        "D:\\cygwin64\\usr\\include\\ImageMagick-7\\Magick++",
+        "D:\\cygwin64\\usr\\include\\ImageMagick-7\\MagickCore",
+        "D:\\cygwin64\\usr\\include\\ImageMagick-7\\MagickWand",
+        "D:\\cygwin64\\ImageMagick\\Magick++\\lib",
+        "D:\\cygwin64\\ImageMagick\\Magick++\\lib\\Magick++",
+        "D:\\cygwin64\\ImageMagick\\MagickCore",
+        "D:\\cygwin64\\ImageMagick\\MagickWand",
+        "D:\\cygwin64\\usr\\include",
+        "D:\\mingw-w64\\x86_64-8.1.0-posix-seh-rt_v6-rev0\\mingw64\\include"
+    ],
+    
+    "terminal.integrated.shell.windows":           "D:\\cygwin64\\bin\\bash.exe",
+    "terminal.integrated.automationShell.windows": "D:\\cygwin64\\bin\\bash.exe",
+    "terminal.integrated.env.windows": { "CHERE_INVOKING": "1" },
+    "terminal.integrated.shellArgs.windows": [ "--login" ]
+}
