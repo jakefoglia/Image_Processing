@@ -12,9 +12,9 @@
         "D:\\cygwin64\\usr\\include",
         "D:\\mingw-w64\\x86_64-8.1.0-posix-seh-rt_v6-rev0\\mingw64\\include"
     ],
-    
-    "terminal.integrated.shell.windows":           "D:\\cygwin64\\bin\\bash.exe",
     "terminal.integrated.automationShell.windows": "D:\\cygwin64\\bin\\bash.exe",
+    "terminal.integrated.shell.windows":           "D:\\cygwin64\\bin\\bash.exe",
     "terminal.integrated.env.windows": { "CHERE_INVOKING": "1" },
     "terminal.integrated.shellArgs.windows": [ "--login" ]
+
 }
