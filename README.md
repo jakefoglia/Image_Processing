@@ -1,9 +1,4 @@
-# Image_Processing <br />
-CPE462 Image Enhancement Project<br />
-
-
-# Windows Setup Instructions <br /> <br />
-
+# Windows Setup Instructions <br />
 **Obtain the cygwin64 installer** <br />
 https://cygwin.com/install.html  >  setup-x86_64.exe <br />
 
