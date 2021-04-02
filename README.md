@@ -42,6 +42,7 @@ Verify apt-cyg is working with the following command <br />
 
 **Try to build and run the project** <br />
 Enter the following commands
+
     $ make exe
     $ ./a.exe
         
