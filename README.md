@@ -10,7 +10,7 @@ Leave the rest on default settings, select any mirror when it asks. <br />
 Install the c++ development tools using this tutorial <br />
 https://www.youtube.com/watch?v=DAlS4hF_PbY&t=4 <br />
     
-Double check that the following packages are installed: <br />
+Double check that the following packages are set to install / are installed: <br />
     lynx, wget, ImageMagick <br />
         
 Click next twice to finish the setup. The download will likely take ~10 minutes or so. 
