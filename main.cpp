@@ -6,72 +6,267 @@
 #include "Magick++.h" // version 7
 #include <stdio.h>
 #include <iostream> 
+#include <stdlib.h>    
+#include <time.h>
+#include <chrono>
+#include <random>
+#include <math.h>
 
 using namespace std; 
 using namespace Magick; 
 
-int main(int argc,char **argv) 
-{ 
-    printf("Hello world\n");
-    InitializeMagick(*argv);
+#define scale (255 / QuantumRange)
 
-    // Construct the image object. Seperating image construction from the 
-    // the read operation ensures that a failure to read the image file 
-    // doesn't render the image object useless. 
+//int64_t distr_sum; // for testing
+//int64_t distr_count;
+
+typedef struct float3
+{
+    float3() {};
+    float3(float x, float y, float z) : x(x), y(y), z(z) {}
+
+    float x, y, z;
+    inline float3 operator*(float s) const { return float3(x*s, y*s, z*s); }
+    inline float3 operator/(float s) const { return float3(x/s, y/s, z/s); }
+    inline float3 operator+(const float3& a) const { return float3(x+a.x, y+a.y, z+a.z); }
+
+} float3;
+
+
+void clip(Quantum* r, Quantum* g, Quantum* b, uint8_t max)
+{
+    if(*r * scale > max)
+        *r = max / scale;
+    else if(*r < 0)
+        *r = 0;
+    
+
+    if(*g * scale > max)
+        *g = max / scale;
+    else if(*g < 0)
+        *g = 0;
+
+
+    if(*b * scale > max)
+        *b = max / scale;
+    else if(*r < 0)
+        *b = 0;
+}
+
+
+float3 variance(Quantum *pixels, int w, int h)
+{
+    // the variance of the signal is the : mean of its (squares minus the square of its mean)
+
+    float r_mean, g_mean, b_mean;
+    r_mean = g_mean = b_mean = 0.0f;
+
+    Quantum* p = pixels;
+    for(int col = 0; col < w; col++)
+    {
+        for(int row = 0; row < h; row++)
+        {
+            int r = *p++ * scale;
+            int g = *p++ * scale;
+            int b = *p++ * scale;
+
+            r_mean += r;
+            g_mean += g;
+            b_mean += b;
+        }
+    }
+    r_mean /= w*h;
+    g_mean /= w*h;
+    b_mean /= w*h;
+
+
+    float r_var, g_var, b_var;
+    r_var = g_var = b_var = 0.0f;
+
+    for(int col = 0; col < w; col++)
+    {
+        for(int row = 0; row < h; row++)
+        {
+            int r = *pixels++ * scale;
+            int g = *pixels++ * scale;
+            int b = *pixels++ * scale;
+
+            r_var += (r*r - r_mean);
+            g_var += (g*g - g_mean);
+            b_var += (b*b - b_mean);
+        }
+    }
+    r_var /= w*h;
+    g_var /= w*h;
+    b_var /= w*h;
+
+    return float3(r_var, g_var, b_var);
+
+}
+
+float3 power(Quantum *pixels, int w, int h)
+{
+    //The power of a signal is the sum of the absolute squares of its time-domain samples divided by the signal length, or, equivalently, the square of its RMS level.
+
+    float r_sq_sum, g_sq_sum, b_sq_sum;
+    r_sq_sum = g_sq_sum = b_sq_sum = 0.0f;
+
+
+    Quantum* p = pixels;
+    for(int col = 0; col < w; col++)
+    {
+        for(int row = 0; row < h; row++)
+        {
+            int r = *p++ * scale;
+            int g = *p++ * scale;
+            int b = *p++ * scale;
+
+            r_sq_sum += r*r;
+            g_sq_sum += g*g;
+            b_sq_sum += b*b;
+        }
+    }
+    
+    return float3(r_sq_sum/(w*h), g_sq_sum/(w*h), b_sq_sum/(w*h));
+
+}
+
+int16_t AWGN(float SNR, float std_dev) // -255 to 255
+{
+    /*
+    Signal-to-Noise Ratio (SNR)
+    http://web.mit.edu/6.02/www/currentsemester/handouts/L08_slides.pdf  slide 7
+    */
+
+    unsigned seed = chrono::system_clock::now().time_since_epoch().count();
+    seed = seed * seed;
+    default_random_engine generator (seed);
+    normal_distribution<float> distribution(0, std_dev);
+
+    int16_t result;
+    if(!isinf(std_dev))
+    {
+        result = distribution(generator);
+        if(result > 255)
+            result = 255;
+        else if(result < -255)
+            result = -255;
+        
+        //distr_sum += result;
+        //distr_count++;
+    }
+    else
+    {
+        srand(seed);
+        result = (255 - (255*2* (rand()%2))); // force 255 or -255 if std_dev was inf
+    }
+    //printf("res: %6.4f\t", result);
+    return  result;
+}
+
+void generate_AWGN(Image& img, float SNRdB) //https://pysdr.org/content/noise.html#snr
+{
+    //distr_count = 0;
+    //distr_sum = 0;
+
+    int w = img.columns();
+    int h = img.rows();
+
+    img.type(TrueColorType);
+    img.modifyImage();
+    Pixels view(img);
+    Quantum *pixels = view.get(0,0,w,h);
+
+    
+    float SNR = powf(10.0f, SNRdB / 10.0f);
+    float3 signal_power = power(pixels, w, h);
+    
+    printf("\tSNRdB %8.6f   SNR %8.6f\n\n\tr_pow %8.6f\n\tg_pow %8.6f\n\tb_pow %8.6f\n\n",
+        SNRdB, SNR, signal_power.x, signal_power.y, signal_power.z);
+
+    //SNR = Power(signal) / variance     variance = std_dev^2
+    float r_std_dev = sqrt( signal_power.x / SNR ); 
+    float g_std_dev = sqrt( signal_power.y / SNR ); 
+    float b_std_dev = sqrt( signal_power.z / SNR ); 
+
+    printf("\tr_std_dev %8.6f\n\tg_std_dev %8.6f\n\tb_std_dev %8.6f\n\n",
+        r_std_dev, g_std_dev, b_std_dev);
+
+    for(int col = 0; col < w; col++)
+    {
+        for(int row = 0; row < h; row++)
+        {
+            Quantum* r = pixels++;
+            Quantum* g = pixels++;
+            Quantum* b = pixels++; 
+
+            //printf("Signal:\t %8.6f %8.6f %8.6f \n", *r * scale, *g * scale, *b * scale);
+            
+            int r_noise = AWGN(SNRdB, r_std_dev) * 255 / scale;
+            int g_noise = AWGN(SNRdB, g_std_dev) * 255 / scale;
+            int b_noise = AWGN(SNRdB, b_std_dev) * 255 / scale;
+
+
+            *r = (int) (*r + r_noise); 
+            *g = (int) (*g + g_noise);
+            *b = (int) (*b + b_noise);
+
+            clip(r, g, b, 255);
+            
+            //printf("NOISE:\t %8.6f %8.6f %8.6f  \n", r_noise * scale, g_noise * scale, b_noise * scale);
+            //printf("Result:\t %8.6f %8.6f %8.6f  \n\n", *r * scale, *g * scale, *b * scale);
+        }
+    }
+    img.syncPixels();
+    view.sync();
+    //printf("distr_avg %6.4f\n", distr_sum/(1.0f*distr_count));
+
+}
+
+void jake_driver(int argc,char **argv)
+{
+    printf("Running...\n");
+    InitializeMagick(*argv);
     Image image;
     try { 
-        // Read a file into image object 
-        image.read( "images/color_gradient.jpg" );
-        int w = image.columns();
-        int h = image.rows();
-
-        image.type(TrueColorType);
-        image.modifyImage();
-        //MagickCore::Quantum *pixels = image.getPixels(0, 0, w, h);
-
-        Pixels view(image);
-        Color green("green"); 
-
-        //Quantum *pixels = view.get( (int)(w/2),(int)(h/2),w,h); 
-        int start_row = (h/2);
-        int start_col = (w/2);
-        Quantum *pixels = view.get(start_col,start_row,w-start_col,h-start_row); 
-
-        for(int col = 0; col < w - start_col; col++)
-        {
-            for(int row = 0; row < h - start_row; row++)
-            {
-                *pixels++=QuantumRange*green.quantumRed();
-                *pixels++=QuantumRange*green.quantumGreen();
-                *pixels++=QuantumRange*green.quantumBlue();
-            }
-        }
-        image.syncPixels();
-         view.sync();
-        // Crop the image to specified size (width, height, xOffset, yOffset)
-        //image.crop( Geometry(100,100, 100, 100) );
-
+        printf("Reading image from disk...\n");
+        image.read( "images/black_n_white.jpg");
         
-        // Write the image to a file 
-        image.write( "images/out.jpg" ); 
 
+        printf("Generating AWGN...\n");
 
+        if(argc == 1)
+        {
+            generate_AWGN(image, 10);
+        }
+        else
+        {
+            float SNRdB = atof(argv[1]);
+            generate_AWGN(image, SNRdB);
+        }
+
+        printf("Writing image to disk...\n");
+        image.write( "images/out.jpg" );      
     } 
     catch( Exception &error_ ) 
     { 
         cout << "Caught exception: " << error_.what() << endl; 
-        return 1; 
+        return;
     }
- 
-    return 0; 
+}
+
+int main(int argc,char **argv) 
+{ 
+    jake_driver(argc, argv);
+    return 0;
 }
 
 
 /*
 Jake TODO:
 
-Additive White Gaussian Noise
-Multiplicative/Speckle Noise
-
+Additive White Gaussian Noise       CHECK
+Multiplicative/Speckle Noise        
 noise removal (Gaussian Filtering)
+
 */
