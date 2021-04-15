@@ -32,27 +32,45 @@ typedef struct float3
 
 } float3;
 
-
-void clip(Quantum* r, Quantum* g, Quantum* b, uint8_t max)
+uint8_t coin_flip()
 {
-    if(*r * scale > max)
-        *r = max / scale;
-    else if(*r < 0)
-        *r = 0;
-    
-
-    if(*g * scale > max)
-        *g = max / scale;
-    else if(*g < 0)
-        *g = 0;
-
-
-    if(*b * scale > max)
-        *b = max / scale;
-    else if(*r < 0)
-        *b = 0;
+    uint8_t val = rand()%2;
+    //printf("CF was %i\n", val);
+    return val ; 
 }
 
+void clip(int& r, int& g, int& b, int max)
+{
+    if(r < 0)
+        r = 0;
+    else if (r > max)
+        r = max;
+
+    if(g < 0)
+        g = 0;
+    else if (g > max)
+        g = max;  
+    
+    if(b < 0)
+        b = 0;
+    else if (b > max)
+        b = max;
+}
+
+void set_rgb(Quantum *pixels, int w, int h, int x, int y, int r,  int g,  int b)
+{
+    clip(r, g, b, 255);
+
+    Quantum* rq = &pixels[3*(w*y + x)    ];
+    Quantum* gq = &pixels[3*(w*y + x) + 1];
+    Quantum* bq = &pixels[3*(w*y + x) + 2];
+
+    *rq = r/scale;
+    *gq = g/scale;
+    *bq = b/scale;
+
+    
+}
 
 float3 variance(Quantum *pixels, int w, int h)
 {
@@ -128,8 +146,8 @@ float3 power(Quantum *pixels, int w, int h)
     }
     
     return float3(r_sq_sum/(w*h), g_sq_sum/(w*h), b_sq_sum/(w*h));
-
 }
+
 
 int16_t AWGN(float SNR, float std_dev) // -255 to 255
 {
@@ -158,7 +176,7 @@ int16_t AWGN(float SNR, float std_dev) // -255 to 255
     else
     {
         srand(seed);
-        result = (255 - (255*2* (rand()%2))); // force 255 or -255 if std_dev was inf
+        result = 255 - (255*2* coin_flip()); // force 255 or -255 if std_dev was inf
     }
     //printf("res: %6.4f\t", result);
     return  result;
@@ -196,22 +214,23 @@ void generate_AWGN(Image& img, float SNRdB) //https://pysdr.org/content/noise.ht
     {
         for(int row = 0; row < h; row++)
         {
-            Quantum* r = pixels++;
-            Quantum* g = pixels++;
-            Quantum* b = pixels++; 
+            Quantum* rq = &pixels[3*(w*row + col)    ];
+            Quantum* gq = &pixels[3*(w*row + col) + 1];
+            Quantum* bq = &pixels[3*(w*row + col) + 2];
 
             //printf("Signal:\t %8.6f %8.6f %8.6f \n", *r * scale, *g * scale, *b * scale);
             
-            int r_noise = AWGN(SNRdB, r_std_dev) * 255 / scale;
-            int g_noise = AWGN(SNRdB, g_std_dev) * 255 / scale;
-            int b_noise = AWGN(SNRdB, b_std_dev) * 255 / scale;
+            int r_noise = AWGN(SNRdB, r_std_dev); //* 255 / scale;
+            int g_noise = AWGN(SNRdB, g_std_dev); //* 255 / scale;
+            int b_noise = AWGN(SNRdB, b_std_dev); //* 255 / scale;
 
 
-            *r = (int) (*r + r_noise); 
-            *g = (int) (*g + g_noise);
-            *b = (int) (*b + b_noise);
+           int r = (*rq * scale + r_noise); 
+           int g = (*gq * scale + g_noise);
+           int b = (*bq * scale + b_noise);
 
-            clip(r, g, b, 255);
+            set_rgb(pixels, w, h, col, row, r, g, b);
+            
             
             //printf("NOISE:\t %8.6f %8.6f %8.6f  \n", r_noise * scale, g_noise * scale, b_noise * scale);
             //printf("Result:\t %8.6f %8.6f %8.6f  \n\n", *r * scale, *g * scale, *b * scale);
@@ -219,13 +238,77 @@ void generate_AWGN(Image& img, float SNRdB) //https://pysdr.org/content/noise.ht
     }
     img.syncPixels();
     view.sync();
-    //printf("distr_avg %6.4f\n", distr_sum/(1.0f*distr_count));
+
+    printf("Writing image to disk...\n");
+    img.write( "images/out_AWGN.jpg" );  
 
 }
 
-void jake_driver(int argc,char **argv)
+void generate_SPN(Image& img, float countToPixelsRatio) //https://www.programmersought.com/article/24315567946/
 {
-    printf("Running...\n");
+
+    unsigned seed = chrono::system_clock::now().time_since_epoch().count();
+    seed = seed * seed;
+    srand(seed);
+
+    int w = img.columns();
+    int h = img.rows();
+
+    img.type(TrueColorType);
+    img.modifyImage();
+    Pixels view(img);
+    Quantum *pixels = view.get(0,0,w,h);
+
+    
+
+    //printf("stuff");
+
+    if(countToPixelsRatio < 1.f)
+    {
+        uint32_t count = countToPixelsRatio * w * h;
+        bool hit[w*h] = {false};
+        for(int i = 0; i < count; i++)
+        {
+            int x, y;
+            do // all must be unique
+            {
+                x = rand() % w;
+                y = rand() % h;
+            } while(hit[w*y + x]) ; 
+
+            hit[w*y + x] = true;
+
+
+            int val = 255*coin_flip();
+            //printf( ((val == 255) ? "white\n" : "black\n" ));
+            set_rgb(pixels, w, h, x, y, val, val, val);
+        }
+    }
+    else // just iterate through all
+    {
+        for(int col = 0; col < w; col++)
+        {
+            for(int row = 0; row < h; row++)
+            {
+                int val = 255*coin_flip();
+                //printf( ((val == 255) ? "white\n" : "black\n" ));
+                set_rgb(pixels, w, h, col, row, val, val, val);
+            }
+        }
+
+    }
+    
+    img.syncPixels();
+    view.sync();
+
+    printf("Writing image to disk...\n");
+    img.write( "images/out_SPN.jpg" );  
+}
+
+
+void jake_driver_AWGN(int argc,char **argv)
+{
+    printf("Additive White Gaussian Noise Driver...\n");
     InitializeMagick(*argv);
     Image image;
     try { 
@@ -245,8 +328,36 @@ void jake_driver(int argc,char **argv)
             generate_AWGN(image, SNRdB);
         }
 
-        printf("Writing image to disk...\n");
-        image.write( "images/out.jpg" );      
+    
+    } 
+    catch( Exception &error_ ) 
+    { 
+        cout << "Caught exception: " << error_.what() << endl; 
+        return;
+    }
+}
+
+void jake_driver_SPN(int argc,char **argv)
+{
+    printf("Salt and Pepper Noise Driver...\n");
+    InitializeMagick(*argv);
+    Image image;
+    try { 
+        printf("Reading image from disk...\n");
+        //image.read( "images/black_n_white.jpg");
+        image.read( "images/color_gradient.jpg");
+
+        printf("Generating MSN...\n");
+
+        if(argc == 1)
+        {
+            generate_SPN(image, 0.5);
+        }
+        else
+        {
+            float ctpr = atof(argv[1]); // countToPixelsRatio
+            generate_SPN(image, ctpr);
+        }  
     } 
     catch( Exception &error_ ) 
     { 
@@ -257,7 +368,8 @@ void jake_driver(int argc,char **argv)
 
 int main(int argc,char **argv) 
 { 
-    jake_driver(argc, argv);
+    //jake_driver_AWGN(argc, argv);
+    jake_driver_SPN(argc, argv);
     return 0;
 }
 
@@ -266,7 +378,8 @@ int main(int argc,char **argv)
 Jake TODO:
 
 Additive White Gaussian Noise       CHECK
-Multiplicative/Speckle Noise        
+Multiplicative/Speckle Noise        CHECK
 noise removal (Gaussian Filtering)
 
+MAKE A SEPARATE PROGRAM FOR EACH TOOL! Pass image name as parameter as well as other arguments needed for tool. 
 */ 
