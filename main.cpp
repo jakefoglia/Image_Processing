@@ -11,6 +11,7 @@
 #include <chrono>
 #include <random>
 #include <math.h>
+#include <string.h>
 
 using namespace std; 
 using namespace Magick; 
@@ -83,19 +84,34 @@ void clip(int& r, int& g, int& b, int max)
         b = max;
 }
 
-void set_rgb(Quantum *pixels, int w, int h, int x, int y, int r,  int g,  int b)
+void get_rgb(Quantum *pixels, int w, int h, int row, int col, int& r,  int& g,  int& b)
+{
+    Quantum* rq = &pixels[3*(w*row + col)    ];
+    Quantum* gq = &pixels[3*(w*row + col) + 1];
+    Quantum* bq = &pixels[3*(w*row + col) + 2];
+
+    r = *rq * scale;
+    g = *gq * scale;
+    b = *bq * scale;
+
+    if(r < 0 || r > 255)
+        printf("get_rgb not working r = %i\n", r);
+    if(g < 0 || g > 255)
+        printf("get_rgb not working r = %i\n", g);
+    if(b < 0 || b > 255)
+        printf("get_rgb not working r = %i\n", b);
+}
+void set_rgb(Quantum *pixels, int w, int h, int row, int col, int r,  int g,  int b)
 {
     clip(r, g, b, 255);
 
-    Quantum* rq = &pixels[3*(w*y + x)    ];
-    Quantum* gq = &pixels[3*(w*y + x) + 1];
-    Quantum* bq = &pixels[3*(w*y + x) + 2];
+    Quantum* rq = &pixels[3*(w*row + col)    ];
+    Quantum* gq = &pixels[3*(w*row + col) + 1];
+    Quantum* bq = &pixels[3*(w*row + col) + 2];
 
     *rq = r/scale;
     *gq = g/scale;
     *bq = b/scale;
-
-    
 }
 
 float3 variance(Quantum *pixels, int w, int h)
@@ -175,7 +191,7 @@ float3 power(Quantum *pixels, int w, int h)
 }
 
 
-int16_t AWGN(float SNR, float std_dev) // -255 to 255
+int16_t generate_AWGN(float SNR, float std_dev) // -255 to 255
 {
     /*
     Signal-to-Noise Ratio (SNR)
@@ -208,7 +224,7 @@ int16_t AWGN(float SNR, float std_dev) // -255 to 255
     return  result;
 }
 
-void generate_AWGN(Image& img, float SNRdB, char const* output_file) //https://pysdr.org/content/noise.html#snr
+void AWGN(Image& img, float SNRdB, char const* output_file) //https://pysdr.org/content/noise.html#snr
 {
     //distr_count = 0;
     //distr_sum = 0;
@@ -248,16 +264,16 @@ void generate_AWGN(Image& img, float SNRdB, char const* output_file) //https://p
 
             //printf("Signal:\t %8.6f %8.6f %8.6f \n", *r * scale, *g * scale, *b * scale);
             
-            int r_noise = AWGN(SNRdB, r_std_dev); //* 255 / scale;
-            int g_noise = AWGN(SNRdB, g_std_dev); //* 255 / scale;
-            int b_noise = AWGN(SNRdB, b_std_dev); //* 255 / scale;
+            int r_noise = generate_AWGN(SNRdB, r_std_dev); //* 255 / scale;
+            int g_noise = generate_AWGN(SNRdB, g_std_dev); //* 255 / scale;
+            int b_noise = generate_AWGN(SNRdB, b_std_dev); //* 255 / scale;
 
 
            int r = (*rq * scale + r_noise); 
            int g = (*gq * scale + g_noise);
            int b = (*bq * scale + b_noise);
 
-            set_rgb(pixels, w, h, col, row, r, g, b);
+            set_rgb(pixels, w, h, row, col, r, g, b);
             
             
             //printf("NOISE:\t %8.6f %8.6f %8.6f  \n", r_noise * scale, g_noise * scale, b_noise * scale);
@@ -272,7 +288,7 @@ void generate_AWGN(Image& img, float SNRdB, char const* output_file) //https://p
 
 }
 
-void generate_SPN(Image& img, float countToPixelsRatio, char const* output_file) //https://www.programmersought.com/article/24315567946/
+void SPN(Image& img, float countToPixelsRatio, char const* output_file) //https://www.programmersought.com/article/24315567946/
 {
 
     unsigned seed = chrono::system_clock::now().time_since_epoch().count();
@@ -308,7 +324,7 @@ void generate_SPN(Image& img, float countToPixelsRatio, char const* output_file)
 
             int val = 255*coin_flip();
             //printf( ((val == 255) ? "white\n" : "black\n" ));
-            set_rgb(pixels, w, h, x, y, val, val, val);
+            set_rgb(pixels, w, h, y, x, val, val, val);
         }
     }
     else // just iterate through all
@@ -319,7 +335,7 @@ void generate_SPN(Image& img, float countToPixelsRatio, char const* output_file)
             {
                 int val = 255*coin_flip();
                 //printf( ((val == 255) ? "white\n" : "black\n" ));
-                set_rgb(pixels, w, h, col, row, val, val, val);
+                set_rgb(pixels, w, h, row, col, val, val, val);
             }
         }
 
@@ -331,6 +347,140 @@ void generate_SPN(Image& img, float countToPixelsRatio, char const* output_file)
     printf("Writing image to disk...\n");
     img.write(output_file);  
 }
+
+
+
+double gaussian(float x, float mu, float sigma ) {
+    float a = (x - mu) / sigma;
+    return exp(-0.5 * a * a);
+}
+
+//https://stackoverflow.com/questions/42186498/gaussian-blur-image-processing-c //https://stackoverflow.com/questions/8204645/implementing-gaussian-blur-how-to-calculate-convolution-matrix-kernel
+ void GBNR(Image& img, int mask_radius, char const* output_file) 
+{
+    int min_radius = 1;
+    int max_radius = 10;
+
+    if(mask_radius < min_radius)
+    {
+        printf("mask_radius must be between %i and %i\n", min_radius, max_radius);
+        printf("using mask_radius = %i\n", min_radius);
+        mask_radius = min_radius;
+    }
+    else if(mask_radius > max_radius)
+    {
+        printf("mask_radius must be between %i and %i\n", min_radius, max_radius);
+        printf("using mask_radius = %i\n", max_radius);
+        mask_radius = max_radius;
+    }
+    int mask_dim = 1+2*mask_radius;
+
+    // generate mask (not normalized)
+    float mask[mask_dim][mask_dim];
+    float norm = 0.f;
+    double sigma = mask_radius/2.f;
+    
+    for (int row = 0; row < mask_dim; row++) 
+        for (int col = 0; col < mask_dim; col++) {
+            float x = gaussian(row, mask_radius, sigma) * gaussian(col, mask_radius, sigma);
+            mask[row][col] = x;
+            norm += x;
+    }
+
+/*
+    for (int row = 0; row < mask_dim; row++) 
+        for (int col = 0; col < mask_dim; col++) 
+            printf("mask(%i, %i) : %6.4f\n", row, col, mask[row][col]/norm);
+*/
+    
+    /* dont normalize the mask
+    for (int col = 0; col < mask_dim; col++)
+        for (int row = 0; row < mask_dim; row++) // normalize
+         {
+            mask[row][col] /= norm;
+    }
+    */
+
+
+    unsigned seed = chrono::system_clock::now().time_since_epoch().count();
+    seed = seed * seed;
+    srand(seed);
+
+    int w = img.columns();
+    int h = img.rows();
+
+    img.type(TrueColorType);
+    img.modifyImage();
+    Pixels view(img);
+    Quantum *pixels = view.get(0,0,w,h);
+    int bytes = 3 * w * h * sizeof(Quantum);
+    Quantum *result = (Quantum*) malloc(bytes);
+
+
+    for(int row = 0; row < h; row++)
+    {
+        for(int col = 0; col < w; col++)
+        {
+            float true_norm;
+            if(row - mask_radius < 0 || row + mask_radius >= h || col - mask_radius < 0 || col + mask_radius >= w) // boundary condition needs custom normalization
+            {
+
+                true_norm = 0.f;
+                for (int j = -1*mask_radius; j <= mask_radius; j++) 
+                    for (int k = -1*mask_radius; k <= mask_radius; k++) {
+                        int y = row + j; 
+                        int x = col + k;
+                        if(y >= 0 && y < h && x >= 0 && x < w) {
+                            true_norm += mask[mask_radius+j][mask_radius+k]; // mask_radius is the center of that dimension (if radius is 1, size is 3, index 1 is the middle of mask) 
+                        }
+                }
+            }
+            else {
+                true_norm = norm;
+            }
+            
+            int r = 0;
+            int g = 0;
+            int b = 0;
+            
+            // convolve the mask
+            for (int j = -1*mask_radius; j <= mask_radius; j++) 
+                for (int k = -1*mask_radius; k <= mask_radius; k++) {
+                    int y = row + j; 
+                    int x = col + k;
+
+
+                    if(y >= 0 && y < h && x >= 0 && x < w) {
+                        int xy_r, xy_g, xy_b;
+                        get_rgb(pixels, w, h, y, x, xy_r, xy_g, xy_b);
+
+                        r += xy_r * mask[mask_radius+j][mask_radius+k]; 
+                        g += xy_g * mask[mask_radius+j][mask_radius+k]; 
+                        b += xy_b * mask[mask_radius+j][mask_radius+k]; 
+
+                    }
+
+
+                    
+
+            }
+            r /= true_norm;
+            g /= true_norm;
+            b /= true_norm;
+
+            set_rgb(result, w, h, row, col, r, g, b);
+        }
+    }
+    memcpy((void*) pixels, (const void*) result, bytes); 
+    free(result);
+
+    img.syncPixels();
+    view.sync();
+
+    printf("Writing image to disk...\n");
+    img.write(output_file);  
+}
+
 
 
 void AWGN_driver()
@@ -367,10 +517,10 @@ void AWGN_driver()
 
 
     float SNRdB;
-    prompt("Enter the Signal to Noise Ratio in dB (recomended range: -30 dB to 50 dB)", SNRdB);
+    prompt("\nEnter the Signal to Noise Ratio in dB (recomended range: -30 dB to 40 dB)", SNRdB);
 
     printf("\nGenerating AWGN...\n");
-    generate_AWGN(image, SNRdB, out_c);
+    AWGN(image, SNRdB, out_c);
      
     
 }
@@ -408,21 +558,88 @@ void SPN_driver()
     char const* out_c = const_cast<char*>(out_str.c_str());
 
     float ctpr;
-    prompt("Enter the Count to Pixel Ratio (0.0 to 1.0)", ctpr);
+    prompt("\nEnter the Count to Pixel Ratio (0.0 to 1.0)", ctpr);
 
     printf("\nGenerating MSN...\n");
-    generate_SPN(image, ctpr, out_c);
+    SPN(image, ctpr, out_c);
 }
 
 
+void GBNR_driver()
+{
+    printf("\nGaussian Blur Noise Removal Tool\n");
+    InitializeMagick(nullptr);
+    Image image;
+    
+    string in_str;
+    prompt("\nEnter the name of the image to process", in_str);
+    in_str = string("images/") + in_str;
+
+    char const* in_c = const_cast<char*>(in_str.c_str());
+
+    printf("Reading image from disk...\n");
+    try { 
+        image.read(in_c);
+    }
+    catch( Exception &error_ ) 
+    { 
+        printf("Could not read image ");
+        printf(in_c); 
+        printf("\nCaught exception:\n\t");
+        printf(error_.what());
+        printf("\n"); 
+        return;
+    }
+
+    string out_str;
+    prompt("\nEnter the desired name of the output image", out_str);
+    out_str = string("images/") + out_str;
+    char const* out_c = const_cast<char*>(out_str.c_str());
+
+
+    int mask_radius;
+    prompt("\nEnter the mask radius", mask_radius);
+
+    printf("\nRemoving Noise...\n");
+    GBNR(image, mask_radius, out_c);
+}
+
+void test_driver()
+{
+    printf("Reading image from disk...\n");
+    Image img;
+    img.read("images/color_gradient.jpg");
+    int w = img.columns();
+    int h = img.rows();
+
+    img.type(TrueColorType);
+    img.modifyImage();
+    Pixels view(img);
+    Quantum *pixels = view.get(0,0,w,h);
+
+    for(int r = 0; r < h; r++)
+        for(int c = 0; c < w; c++)
+        {
+            //set_rgb(pixels, w, h, r, c, 255, 255, 255);            
+            set_rgb(pixels, w, h, r, c, (r+c) % 255, (r+c) % 255, (r+c) % 255);
+        }  
+
+    //void set_rgb(Quantum *pixels, int w, int h, int row, int col, int r,  int g,  int b)
+    img.syncPixels();
+    view.sync();
+
+    printf("Writing image to disk...\n");
+    img.write("images/test.jpg");  
+}
 
 int main(int argc, char **argv) 
 { 
+    
     bool run = true;
     while(run)
     {
         int tool = 0;
-        char const* str = "\nEnter an integer to select a tool: \n\t0 : Exit \n\t1 : Additive White Gaussian Noise \n\t2 : Salt & Pepper Noise\n";  // feel free to add more options for your tools
+        char const* str = "\nEnter an integer to select a tool: \n\t0 : Exit \n\t1 : Additive White Gaussian Noise \n\t2 : Salt & Pepper Noise\n\t3 : Gaussian Blur Noise Removal\n";  // feel free to add more options for your tools
         prompt(str, tool);
         //printf("input %i\n", tool);
         switch(tool)
@@ -440,6 +657,11 @@ int main(int argc, char **argv)
                 run = true;
                 SPN_driver();
                 break;
+            
+            case 3 :
+                run = true;
+                GBNR_driver();
+                break;
 
             default :
                 run = true;
@@ -448,8 +670,9 @@ int main(int argc, char **argv)
 
         }
     }
-
-    return 0;
+    
+   //test_driver();
+   return 0;
 }
 
 
@@ -461,3 +684,6 @@ Multiplicative/Speckle Noise        CHECK
 noise removal (Gaussian Filtering)
 
 */ 
+
+
+// TODO: put all for loops in row-col order for sequential mem acces
