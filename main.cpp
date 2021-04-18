@@ -122,9 +122,9 @@ float3 variance(Quantum *pixels, int w, int h)
     r_mean = g_mean = b_mean = 0.0f;
 
     Quantum* p = pixels;
-    for(int col = 0; col < w; col++)
+    for(int row = 0; row < h; row++)
     {
-        for(int row = 0; row < h; row++)
+        for(int col = 0; col < w; col++)
         {
             int r = *p++ * scale;
             int g = *p++ * scale;
@@ -143,9 +143,9 @@ float3 variance(Quantum *pixels, int w, int h)
     float r_var, g_var, b_var;
     r_var = g_var = b_var = 0.0f;
 
-    for(int col = 0; col < w; col++)
+    for(int row = 0; row < h; row++)
     {
-        for(int row = 0; row < h; row++)
+        for(int col = 0; col < w; col++)
         {
             int r = *pixels++ * scale;
             int g = *pixels++ * scale;
@@ -173,9 +173,9 @@ float3 power(Quantum *pixels, int w, int h)
 
 
     Quantum* p = pixels;
-    for(int col = 0; col < w; col++)
+    for(int row = 0; row < h; row++)
     {
-        for(int row = 0; row < h; row++)
+        for(int col = 0; col < w; col++)
         {
             int r = *p++ * scale;
             int g = *p++ * scale;
@@ -253,10 +253,8 @@ void AWGN(Image& img, float SNRdB, char const* output_file) //https://pysdr.org/
     printf("\tr_std_dev %8.6f\n\tg_std_dev %8.6f\n\tb_std_dev %8.6f\n\n",
         r_std_dev, g_std_dev, b_std_dev);
 */
-
-    for(int col = 0; col < w; col++)
-    {
-        for(int row = 0; row < h; row++)
+    for(int row = 0; row < h; row++)
+        for(int col = 0; col < w; col++)
         {
             Quantum* rq = &pixels[3*(w*row + col)    ];
             Quantum* gq = &pixels[3*(w*row + col) + 1];
@@ -274,11 +272,9 @@ void AWGN(Image& img, float SNRdB, char const* output_file) //https://pysdr.org/
            int b = (*bq * scale + b_noise);
 
             set_rgb(pixels, w, h, row, col, r, g, b);
-            
-            
+    
             //printf("NOISE:\t %8.6f %8.6f %8.6f  \n", r_noise * scale, g_noise * scale, b_noise * scale);
             //printf("Result:\t %8.6f %8.6f %8.6f  \n\n", *r * scale, *g * scale, *b * scale);
-        }
     }
     img.syncPixels();
     view.sync();
@@ -329,9 +325,9 @@ void SPN(Image& img, float countToPixelsRatio, char const* output_file) //https:
     }
     else // just iterate through all
     {
-        for(int col = 0; col < w; col++)
+        for(int row = 0; row < h; row++)
         {
-            for(int row = 0; row < h; row++)
+            for(int col = 0; col < w; col++)
             {
                 int val = 255*coin_flip();
                 //printf( ((val == 255) ? "white\n" : "black\n" ));
@@ -617,11 +613,10 @@ void test_driver()
     Pixels view(img);
     Quantum *pixels = view.get(0,0,w,h);
 
-    for(int r = 0; r < h; r++)
-        for(int c = 0; c < w; c++)
-        {
-            //set_rgb(pixels, w, h, r, c, 255, 255, 255);            
-            set_rgb(pixels, w, h, r, c, (r+c) % 255, (r+c) % 255, (r+c) % 255);
+    for(int row = 0; row < h; row++)
+        for(int col = 0; col < w; col++)
+        {        
+            set_rgb(pixels, w, h, row, col, (row+col) % 255, (row+col) % 255, (row+col) % 255);
         }  
 
     //void set_rgb(Quantum *pixels, int w, int h, int row, int col, int r,  int g,  int b)
@@ -677,13 +672,9 @@ int main(int argc, char **argv)
 
 
 /*
-Jake TODO:
+Jake:
 
 Additive White Gaussian Noise       CHECK
 Multiplicative/Speckle Noise        CHECK
-noise removal (Gaussian Filtering)
-
+noise removal (Gaussian Filtering)  CHECK
 */ 
-
-
-// TODO: put all for loops in row-col order for sequential mem acces
