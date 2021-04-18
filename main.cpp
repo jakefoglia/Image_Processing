@@ -32,6 +32,32 @@ typedef struct float3
 
 } float3;
 
+
+void prompt(char const* prompt_msg, int& val)
+{
+    printf(prompt_msg);
+    printf("\n");
+    std::cin >> val;
+}
+void prompt(char const* prompt_msg, uint& val)
+{
+    printf(prompt_msg);
+    printf("\n");
+    std::cin >> val;
+}
+void prompt(char const* prompt_msg, float& val)
+{
+    printf(prompt_msg);
+    printf("\n");
+    std::cin >> val;
+}
+void prompt(char const* prompt_msg, string& val)
+{
+    printf(prompt_msg);
+    printf("\n");
+    std::cin >> val;
+}
+
 uint8_t coin_flip()
 {
     uint8_t val = rand()%2;
@@ -182,7 +208,7 @@ int16_t AWGN(float SNR, float std_dev) // -255 to 255
     return  result;
 }
 
-void generate_AWGN(Image& img, float SNRdB) //https://pysdr.org/content/noise.html#snr
+void generate_AWGN(Image& img, float SNRdB, char const* output_file) //https://pysdr.org/content/noise.html#snr
 {
     //distr_count = 0;
     //distr_sum = 0;
@@ -198,17 +224,19 @@ void generate_AWGN(Image& img, float SNRdB) //https://pysdr.org/content/noise.ht
     
     float SNR = powf(10.0f, SNRdB / 10.0f);
     float3 signal_power = power(pixels, w, h);
-    
+/*    
     printf("\tSNRdB %8.6f   SNR %8.6f\n\n\tr_pow %8.6f\n\tg_pow %8.6f\n\tb_pow %8.6f\n\n",
         SNRdB, SNR, signal_power.x, signal_power.y, signal_power.z);
-
+*/
     //SNR = Power(signal) / variance     variance = std_dev^2
     float r_std_dev = sqrt( signal_power.x / SNR ); 
     float g_std_dev = sqrt( signal_power.y / SNR ); 
     float b_std_dev = sqrt( signal_power.z / SNR ); 
 
+/*
     printf("\tr_std_dev %8.6f\n\tg_std_dev %8.6f\n\tb_std_dev %8.6f\n\n",
         r_std_dev, g_std_dev, b_std_dev);
+*/
 
     for(int col = 0; col < w; col++)
     {
@@ -240,11 +268,11 @@ void generate_AWGN(Image& img, float SNRdB) //https://pysdr.org/content/noise.ht
     view.sync();
 
     printf("Writing image to disk...\n");
-    img.write( "images/out_AWGN.jpg" );  
+    img.write(output_file);  
 
 }
 
-void generate_SPN(Image& img, float countToPixelsRatio) //https://www.programmersought.com/article/24315567946/
+void generate_SPN(Image& img, float countToPixelsRatio, char const* output_file) //https://www.programmersought.com/article/24315567946/
 {
 
     unsigned seed = chrono::system_clock::now().time_since_epoch().count();
@@ -260,7 +288,6 @@ void generate_SPN(Image& img, float countToPixelsRatio) //https://www.programmer
     Quantum *pixels = view.get(0,0,w,h);
 
     
-
     //printf("stuff");
 
     if(countToPixelsRatio < 1.f)
@@ -302,74 +329,126 @@ void generate_SPN(Image& img, float countToPixelsRatio) //https://www.programmer
     view.sync();
 
     printf("Writing image to disk...\n");
-    img.write( "images/out_SPN.jpg" );  
+    img.write(output_file);  
 }
 
 
-void jake_driver_AWGN(int argc,char **argv)
+void AWGN_driver()
 {
-    printf("Additive White Gaussian Noise Driver...\n");
-    InitializeMagick(*argv);
+    printf("\nAdditive White Gaussian Noise Tool\n");
+    InitializeMagick(nullptr);
     Image image;
-    try { 
-        printf("Reading image from disk...\n");
-        image.read( "images/black_n_white.jpg");
-        
-
-        printf("Generating AWGN...\n");
-
-        if(argc == 1)
-        {
-            generate_AWGN(image, 10);
-        }
-        else
-        {
-            float SNRdB = atof(argv[1]);
-            generate_AWGN(image, SNRdB);
-        }
-
     
-    } 
-    catch( Exception &error_ ) 
-    { 
-        cout << "Caught exception: " << error_.what() << endl; 
-        return;
-    }
-}
+    string in_str;
+    prompt("\nEnter the name of the image to process", in_str);
+    in_str = string("images/") + in_str;
 
-void jake_driver_SPN(int argc,char **argv)
-{
-    printf("Salt and Pepper Noise Driver...\n");
-    InitializeMagick(*argv);
-    Image image;
+    char const* in_c = const_cast<char*>(in_str.c_str());
+
+    printf("Reading image from disk...\n");
     try { 
-        printf("Reading image from disk...\n");
-        //image.read( "images/black_n_white.jpg");
-        image.read( "images/color_gradient.jpg");
-
-        printf("Generating MSN...\n");
-
-        if(argc == 1)
-        {
-            generate_SPN(image, 0.5);
-        }
-        else
-        {
-            float ctpr = atof(argv[1]); // countToPixelsRatio
-            generate_SPN(image, ctpr);
-        }  
-    } 
+        image.read(in_c);
+    }
     catch( Exception &error_ ) 
     { 
-        cout << "Caught exception: " << error_.what() << endl; 
+        printf("Could not read image ");
+        printf(in_c); 
+        printf("\nCaught exception:\n\t");
+        printf(error_.what());
+        printf("\n"); 
         return;
     }
+
+    string out_str;
+    prompt("\nEnter the desired name of the output image", out_str);
+    out_str = string("images/") + out_str;
+
+    char const* out_c = const_cast<char*>(out_str.c_str());
+
+
+    float SNRdB;
+    prompt("Enter the Signal to Noise Ratio in dB (recomended range: -30 dB to 50 dB)", SNRdB);
+
+    printf("\nGenerating AWGN...\n");
+    generate_AWGN(image, SNRdB, out_c);
+     
+    
 }
 
-int main(int argc,char **argv) 
+void SPN_driver()
+{
+    printf("\nSalt and Pepper Noise Tool\n");
+    InitializeMagick(nullptr);
+    Image image;
+    
+    string in_str;
+    prompt("\nEnter the name of the image to process", in_str);
+    in_str = string("images/") + in_str;
+
+    char const* in_c = const_cast<char*>(in_str.c_str());
+
+    printf("Reading image from disk...\n");
+    try { 
+        image.read(in_c);
+    }
+    catch( Exception &error_ ) 
+    { 
+        printf("Could not read image ");
+        printf(in_c); 
+        printf("\nCaught exception:\n\t");
+        printf(error_.what());
+        printf("\n"); 
+        return;
+    }
+
+    string out_str;
+    prompt("\nEnter the desired name of the output image", out_str);
+    out_str = string("images/") + out_str;
+
+    char const* out_c = const_cast<char*>(out_str.c_str());
+
+    float ctpr;
+    prompt("Enter the Count to Pixel Ratio (0.0 to 1.0)", ctpr);
+
+    printf("\nGenerating MSN...\n");
+    generate_SPN(image, ctpr, out_c);
+}
+
+
+
+int main(int argc, char **argv) 
 { 
-    //jake_driver_AWGN(argc, argv);
-    jake_driver_SPN(argc, argv);
+    bool run = true;
+    while(run)
+    {
+        int tool = 0;
+        char const* str = "\nEnter an integer to select a tool: \n\t0 : Exit \n\t1 : Additive White Gaussian Noise \n\t2 : Salt & Pepper Noise\n";  // feel free to add more options for your tools
+        prompt(str, tool);
+        //printf("input %i\n", tool);
+        switch(tool)
+        {
+            case 0 :
+                run = false;
+                break;
+
+            case 1 :
+                run = true;
+                AWGN_driver();
+                break;
+
+            case 2 :
+                run = true;
+                SPN_driver();
+                break;
+
+            default :
+                run = true;
+                printf("invalid input\n");
+                break;
+
+        }
+    }
+
     return 0;
 }
 
@@ -381,5 +460,4 @@ Additive White Gaussian Noise       CHECK
 Multiplicative/Speckle Noise        CHECK
 noise removal (Gaussian Filtering)
 
-MAKE A SEPARATE PROGRAM FOR EACH TOOL! Pass image name as parameter as well as other arguments needed for tool. 
 */ 
