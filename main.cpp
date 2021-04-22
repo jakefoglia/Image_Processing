@@ -351,8 +351,86 @@ double gaussian(float x, float mu, float sigma ) {
     return exp(-0.5 * a * a);
 }
 
+void median(std::vector<int>& r_v, std::vector<int>& g_v, std::vector<int>& b_v, int& r_median, int& g_median, int& b_median) // median for each channel individually
+{
+    std::sort(r_v.begin(), r_v.end() );
+    std::sort(g_v.begin(), g_v.end() );
+    std::sort(b_v.begin(), b_v.end() );    
+
+    r_median = r_v.at(r_v.size()/2);
+    g_median = g_v.at(g_v.size()/2);
+    b_median = b_v.at(b_v.size()/2);
+}
+void MFNR(Image& img, int radius, char const* output_file) 
+{
+    int min_radius = 1;
+    int max_radius = 10;
+
+    if(radius < min_radius)
+    {
+        printf("radius must be between %i and %i\n", min_radius, max_radius);
+        printf("using radius = %i\n", min_radius);
+        radius = min_radius;
+    }
+    else if(radius > max_radius)
+    {
+        printf("radius must be between %i and %i\n", min_radius, max_radius);
+        printf("using radius = %i\n", max_radius);
+        radius = max_radius;
+    }
+    int mask_dim = 1+2*radius;
+
+    
+    int w = img.columns();
+    int h = img.rows();
+
+    img.type(TrueColorType);
+    img.modifyImage();
+    Pixels view(img);
+    Quantum *pixels = view.get(0,0,w,h);
+    int bytes = 3 * w * h * sizeof(Quantum);
+    Quantum *result = (Quantum*) malloc(bytes);
+
+
+    for(int row = 0; row < h; row++)
+    {
+        for(int col = 0; col < w; col++)
+        {
+           
+            
+            std::vector<int> r_v, g_v, b_v;
+
+            // convolve the mask
+            for (int j = -1*radius; j <= radius; j++) 
+                for (int k = -1*radius; k <= radius; k++) {
+                    int y = row + j; 
+                    int x = col + k;
+
+                    if(y >= 0 && y < h && x >= 0 && x < w) {
+                        int xy_r, xy_g, xy_b;
+                        get_rgb(pixels, w, h, y, x, xy_r, xy_g, xy_b);
+                        r_v.push_back(xy_r);
+                        g_v.push_back(xy_g);
+                        b_v.push_back(xy_b);
+                    }
+            }
+            int r, g, b;
+            median(r_v, g_v, b_v, r, g, b);   
+            set_rgb(result, w, h, row, col, r, g, b);
+        }
+    }
+    memcpy((void*) pixels, (const void*) result, bytes); 
+    free(result);
+
+    img.syncPixels();
+    view.sync();
+
+    printf("Writing image to disk...\n");
+    img.write(output_file);  
+}
+
 //https://stackoverflow.com/questions/42186498/gaussian-blur-image-processing-c //https://stackoverflow.com/questions/8204645/implementing-gaussian-blur-how-to-calculate-convolution-matrix-kernel
- void GBNR(Image& img, int mask_radius, char const* output_file) 
+void GBNR(Image& img, int mask_radius, char const* output_file) 
 {
     int min_radius = 1;
     int max_radius = 10;
@@ -382,21 +460,6 @@ double gaussian(float x, float mu, float sigma ) {
             mask[row][col] = x;
             norm += x;
     }
-
-/*
-    for (int row = 0; row < mask_dim; row++) 
-        for (int col = 0; col < mask_dim; col++) 
-            printf("mask(%i, %i) : %6.4f\n", row, col, mask[row][col]/norm);
-*/
-    
-    /* dont normalize the mask
-    for (int col = 0; col < mask_dim; col++)
-        for (int row = 0; row < mask_dim; row++) // normalize
-         {
-            mask[row][col] /= norm;
-    }
-    */
-
 
     unsigned seed = chrono::system_clock::now().time_since_epoch().count();
     seed = seed * seed;
@@ -560,6 +623,44 @@ void SPN_driver()
     SPN(image, ctpr, out_c);
 }
 
+void MFNR_driver()
+{
+    printf("\nMedian Filtering Noise Removal Tool\n");
+    InitializeMagick(nullptr);
+    Image image;
+    
+    string in_str;
+    prompt("\nEnter the name of the image to process", in_str);
+    in_str = string("images/") + in_str;
+
+    char const* in_c = const_cast<char*>(in_str.c_str());
+
+    printf("Reading image from disk...\n");
+    try { 
+        image.read(in_c);
+    }
+    catch( Exception &error_ ) 
+    { 
+        printf("Could not read image ");
+        printf(in_c); 
+        printf("\nCaught exception:\n\t");
+        printf(error_.what());
+        printf("\n"); 
+        return;
+    }
+
+    string out_str;
+    prompt("\nEnter the desired name of the output image", out_str);
+    out_str = string("images/") + out_str;
+    char const* out_c = const_cast<char*>(out_str.c_str());
+
+
+    int radius;
+    prompt("\nEnter the filter radius", radius);
+
+    printf("\nRemoving Noise...\n");
+    MFNR(image, radius, out_c);
+}
 
 void GBNR_driver()
 {
@@ -634,7 +735,7 @@ int main(int argc, char **argv)
     while(run)
     {
         int tool = 0;
-        char const* str = "\nEnter an integer to select a tool: \n\t0 : Exit \n\t1 : Additive White Gaussian Noise \n\t2 : Salt & Pepper Noise\n\t3 : Gaussian Blur Noise Removal\n";  // feel free to add more options for your tools
+        char const* str = "\nEnter an integer to select a tool: \n\t0 : Exit \n\t1 : Additive White Gaussian Noise \n\t2 : Salt & Pepper Noise\n\t3 : Median Filtering Noise Removal\n\t4 : Gaussian Blur Noise Removal\n";  // feel free to add more options for your tools
         prompt(str, tool);
         //printf("input %i\n", tool);
         switch(tool)
@@ -654,6 +755,11 @@ int main(int argc, char **argv)
                 break;
             
             case 3 :
+                run = true;
+                MFNR_driver();
+                break;
+
+            case 4 :
                 run = true;
                 GBNR_driver();
                 break;
@@ -676,5 +782,8 @@ Jake:
 
 Additive White Gaussian Noise       CHECK
 Multiplicative/Speckle Noise        CHECK
-noise removal (Gaussian Filtering)  CHECK
+noise removal (Median Filtering)
+
+
 */ 
+
