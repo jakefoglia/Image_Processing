@@ -6,7 +6,7 @@ CC = g++
 FLAGS1 = `Magick++-config --cppflags`
 FLAGS2 = `Magick++-config --ldflags --libs`
 
-INC =-I/usr/include/ImageMagick-7/Magick++.h
+INC =/usr/include/ImageMagick-7/Magick++.h
 
 
 OBJS = main.o
