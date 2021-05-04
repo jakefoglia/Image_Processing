@@ -540,6 +540,45 @@ void GBNR(Image& img, int mask_radius, char const* output_file)
     img.write(output_file);  
 }
 
+//https://docs.opencv.org/3.4/d3/dc1/tutorial_basic_linear_transform.html
+void contrast(Image& img, double alpha, int beta, char const* output_file) 
+{
+    int w = img.columns();
+    int h = img.rows();
+    img.type(TrueColorType);
+    img.modifyImage();
+    Pixels view(img);
+    Quantum *pixels = img.getPixels(0,0,w,h);
+        int bytes = 3 * w * h * sizeof(Quantum);
+    Quantum *result = (Quantum*) malloc(bytes);
+
+    int r, g, b;
+    r = g = b = 0;
+
+    for(int y = 0; y < h; y++) {
+        for(int x = 0; x < w; x++) {
+            int xy_r, xy_g, xy_b;
+            get_rgb(pixels, w, h, y, x, xy_r, xy_g, xy_b);
+
+            r = xy_r*alpha + beta;
+            g = xy_g*alpha + beta;
+            b = xy_b*alpha + beta;
+
+            set_rgb(result, w, h, y, x, r, g, b);
+        }
+    }
+    memcpy((void*) pixels, (const void*) result, bytes); 
+    free(result);
+
+    img.syncPixels();
+    view.sync();
+
+    printf("Writing image...\n");
+    img.write(output_file);
+
+
+}
+
 
 
 void AWGN_driver()
@@ -701,6 +740,44 @@ void GBNR_driver()
     GBNR(image, mask_radius, out_c);
 }
 
+void contrast_driver()
+{
+    printf("Contrast Slider Tool\n");
+    InitializeMagick(nullptr);
+    Image image;
+
+    string in_str;
+    prompt("\nEnter the name of the image to process", in_str);
+    in_str = string("images/") + in_str;
+
+    char const* in_c = const_cast<char*>(in_str.c_str());
+
+    printf("Reading image from disk...\n");
+    try {
+        image.read(in_c);
+    }
+    catch( Exception &error_ )
+    {
+        printf("Could not read image ");
+        printf(in_c);
+        printf("\nCaught exception:\n\t");
+        printf(error_.what());
+        printf("\n");
+        return;
+    }
+
+    string out_str;
+    prompt("\nEnter the desired name of the output image", out_str);
+    out_str = string("images/") + out_str;
+    char const* out_c = const_cast<char*>(out_str.c_str());
+
+    int alpha;
+    int beta;
+    prompt("\nEnter the alpha value", alpha);
+    prompt("\nEnter the beta value", beta);
+    contrast(image, alpha, beta, out_c);
+}
+
 void test_driver()
 {
     printf("Reading image from disk...\n");
@@ -735,7 +812,7 @@ int main(int argc, char **argv)
     while(run)
     {
         int tool = 0;
-        char const* str = "\nEnter an integer to select a tool: \n\t0 : Exit \n\t1 : Additive White Gaussian Noise \n\t2 : Salt & Pepper Noise\n\t3 : Median Filtering Noise Removal\n\t4 : Gaussian Blur Noise Removal\n";  // feel free to add more options for your tools
+        char const* str = "\nEnter an integer to select a tool: \n\t0 : Exit \n\t1 : Additive White Gaussian Noise \n\t2 : Salt & Pepper Noise\n\t3 : Median Filtering Noise Removal\n\t4 : Gaussian Blur Noise Removal\n\t5 : Contrast Slider\n";  // feel free to add more options for your tools
         prompt(str, tool);
         //printf("input %i\n", tool);
         switch(tool)
@@ -762,6 +839,11 @@ int main(int argc, char **argv)
             case 4 :
                 run = true;
                 GBNR_driver();
+                break;
+            
+            case 5:
+                run = true;
+                contrast_driver();
                 break;
 
             default :
