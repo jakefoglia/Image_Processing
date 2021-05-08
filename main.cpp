@@ -541,7 +541,7 @@ void GBNR(Image& img, int mask_radius, char const* output_file)
 }
 
 //https://docs.opencv.org/3.4/d3/dc1/tutorial_basic_linear_transform.html
-void contrast(Image& img, double alpha, int beta, char const* output_file) 
+void contrast_brightness(Image& img, int gamma, int beta, char const* output_file) 
 {
     int w = img.columns();
     int h = img.rows();
@@ -560,9 +560,15 @@ void contrast(Image& img, double alpha, int beta, char const* output_file)
             int xy_r, xy_g, xy_b;
             get_rgb(pixels, w, h, y, x, xy_r, xy_g, xy_b);
 
-            r = xy_r*alpha + beta;
-            g = xy_g*alpha + beta;
-            b = xy_b*alpha + beta;
+            if (gamma != 0) {
+                r = xy_r + (xy_r-127)*gamma + beta;
+                g = xy_g + (xy_g-127)*gamma + beta;
+                b = xy_b + (xy_b-127)*gamma + beta;
+            } else {
+                r = xy_r + beta;
+                g = xy_g + beta;
+                b = xy_b + beta;
+            }
             
             set_rgb(result, w, h, y, x, r, g, b);
         }
@@ -772,9 +778,9 @@ void GBNR_driver()
     GBNR(image, mask_radius, out_c);
 }
 
-void contrast_driver()
+void contrast_brightness_driver()
 {
-    printf("Contrast Slider Tool\n");
+    printf("Contrast and Brightness Tool\n");
     InitializeMagick(nullptr);
     Image image;
 
@@ -803,11 +809,10 @@ void contrast_driver()
     out_str = string("images/") + out_str;
     char const* out_c = const_cast<char*>(out_str.c_str());
 
-    int alpha;
-    int beta;
-    prompt("\nEnter the alpha value", alpha);
-    prompt("\nEnter the beta value", beta);
-    contrast(image, alpha, beta, out_c);
+    int gamma, beta;
+    prompt("\nEnter the gamma value (for contrast) (recommended = 1)", gamma);
+    prompt("\nEnter the beta value (for brightness) (recommended +- 50)", beta);
+    contrast_brightness(image, gamma, beta, out_c);
 }
 
 void color_driver()
@@ -883,7 +888,7 @@ int main(int argc, char **argv)
     while(run)
     {
         int tool = 0;
-        char const* str = "\nEnter an integer to select a tool: \n\t0 : Exit \n\t1 : Additive White Gaussian Noise \n\t2 : Salt & Pepper Noise\n\t3 : Median Filtering Noise Removal\n\t4 : Gaussian Blur Noise Removal\n\t5 : Contrast Slider\n\t6 : Colormap Tool\n";  // feel free to add more options for your tools
+        char const* str = "\nEnter an integer to select a tool: \n\t0 : Exit \n\t1 : Additive White Gaussian Noise \n\t2 : Salt & Pepper Noise\n\t3 : Median Filtering Noise Removal\n\t4 : Gaussian Blur Noise Removal\n\t5 : Contrast and Brightness Sliders\n\t6 : Colormap Tool\n";  // feel free to add more options for your tools
         prompt(str, tool);
         //printf("input %i\n", tool);
         switch(tool)
@@ -914,7 +919,7 @@ int main(int argc, char **argv)
             
             case 5:
                 run = true;
-                contrast_driver();
+                contrast_brightness_driver();
                 break;
 
             case 6:
