@@ -554,16 +554,25 @@ void contrast_brightness(Image& img, int gamma, int beta, char const* output_fil
 
     int r, g, b;
     r = g = b = 0;
+    double intensity;
 
     for(int y = 0; y < h; y++) {
         for(int x = 0; x < w; x++) {
             int xy_r, xy_g, xy_b;
             get_rgb(pixels, w, h, y, x, xy_r, xy_g, xy_b);
-
+            
             if (gamma != 0) {
-                r = xy_r + (xy_r-127)*gamma + beta;
-                g = xy_g + (xy_g-127)*gamma + beta;
-                b = xy_b + (xy_b-127)*gamma + beta;
+                intensity = (xy_r + xy_g + xy_b)/3;
+                if (intensity > 127) {
+                    r = xy_r + gamma*gamma + beta;
+                    g = xy_g + gamma*gamma + beta;
+                    b = xy_b + gamma*gamma + beta;
+                }
+                else {
+                    r = xy_r - gamma*gamma + beta;
+                    g = xy_g - gamma*gamma + beta;
+                    b = xy_b - gamma*gamma + beta;
+                }
             } else {
                 r = xy_r + beta;
                 g = xy_g + beta;
@@ -810,7 +819,7 @@ void contrast_brightness_driver()
     char const* out_c = const_cast<char*>(out_str.c_str());
 
     int gamma, beta;
-    prompt("\nEnter the gamma value (for contrast) (recommended = 1)", gamma);
+    prompt("\nEnter the gamma value (for contrast) (recommended = 5)", gamma);
     prompt("\nEnter the beta value (for brightness) (recommended +- 50)", beta);
     contrast_brightness(image, gamma, beta, out_c);
 }
