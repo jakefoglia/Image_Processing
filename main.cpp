@@ -430,7 +430,7 @@ void MFNR(Image& img, int radius, char const* output_file)
 }
 
 //https://stackoverflow.com/questions/42186498/gaussian-blur-image-processing-c //https://stackoverflow.com/questions/8204645/implementing-gaussian-blur-how-to-calculate-convolution-matrix-kernel
-void GBNR(Image& img, int mask_radius, char const* output_file) 
+void blur(Image& img, int mask_radius, char const* output_file) 
 {
     int min_radius = 1;
     int max_radius = 10;
@@ -483,7 +483,6 @@ void GBNR(Image& img, int mask_radius, char const* output_file)
             float true_norm;
             if(row - mask_radius < 0 || row + mask_radius >= h || col - mask_radius < 0 || col + mask_radius >= w) // boundary condition needs custom normalization
             {
-
                 true_norm = 0.f;
                 for (int j = -1*mask_radius; j <= mask_radius; j++) 
                     for (int k = -1*mask_radius; k <= mask_radius; k++) {
@@ -508,6 +507,112 @@ void GBNR(Image& img, int mask_radius, char const* output_file)
                     int y = row + j; 
                     int x = col + k;
 
+                    if(y >= 0 && y < h && x >= 0 && x < w) {
+                        int xy_r, xy_g, xy_b;
+                        get_rgb(pixels, w, h, y, x, xy_r, xy_g, xy_b);
+
+                        r += xy_r * mask[mask_radius+j][mask_radius+k]; 
+                        g += xy_g * mask[mask_radius+j][mask_radius+k]; 
+                        b += xy_b * mask[mask_radius+j][mask_radius+k]; 
+
+                    }
+            }
+            r /= true_norm;
+            g /= true_norm;
+            b /= true_norm;
+
+            set_rgb(result, w, h, row, col, r, g, b);
+        }
+    }
+    memcpy((void*) pixels, (const void*) result, bytes); 
+    free(result);
+
+    img.syncPixels();
+    view.sync();
+
+    printf("Writing image to disk...\n");
+    img.write(output_file);  
+}
+
+void sharpen(Image& img, int mask_radius, char const* output_file) 
+{
+    int min_radius = 1;
+    int max_radius = 10;
+
+    if(mask_radius < min_radius)
+    {
+        printf("mask_radius must be between %i and %i\n", min_radius, max_radius);
+        printf("using mask_radius = %i\n", min_radius);
+        mask_radius = min_radius;
+    }
+    else if(mask_radius > max_radius)
+    {
+        printf("mask_radius must be between %i and %i\n", min_radius, max_radius);
+        printf("using mask_radius = %i\n", max_radius);
+        mask_radius = max_radius;
+    }
+    int mask_dim = 1+2*mask_radius;
+
+    // generate mask (not normalized)
+    float mask[mask_dim][mask_dim];
+    float norm = 0.f;
+    double sigma = mask_radius/2.f;
+    
+    for (int row = 0; row < mask_dim; row++) 
+        for (int col = 0; col < mask_dim; col++) {
+            float x = gaussian(row, mask_radius, sigma) * gaussian(col, mask_radius, sigma);
+            mask[row][col] = x;
+            norm += x;
+    }
+
+    unsigned seed = chrono::system_clock::now().time_since_epoch().count();
+    seed = seed * seed;
+    srand(seed);
+
+    int w = img.columns();
+    int h = img.rows();
+
+    img.type(TrueColorType);
+    img.modifyImage();
+    Pixels view(img);
+    Quantum *pixels = view.get(0,0,w,h);
+    int bytes = 3 * w * h * sizeof(Quantum);
+    Quantum *result = (Quantum*) malloc(bytes);
+
+
+    for(int row = 0; row < h; row++)
+    {
+        for(int col = 0; col < w; col++)
+        {
+            float true_norm;
+            if(row - mask_radius < 0 || row + mask_radius >= h || col - mask_radius < 0 || col + mask_radius >= w) // boundary condition needs custom normalization
+            {
+                true_norm = 0.f;
+                for (int j = -1*mask_radius; j <= mask_radius; j++) 
+                    for (int k = -1*mask_radius; k <= mask_radius; k++) {
+                        int y = row + j; 
+                        int x = col + k;
+                        if(y >= 0 && y < h && x >= 0 && x < w) {
+                            true_norm += mask[mask_radius+j][mask_radius+k]; // mask_radius is the center of that dimension (if radius is 1, size is 3, index 1 is the middle of mask) 
+                        }
+                }
+            }
+            else {
+                true_norm = norm;
+            }
+            
+            int r = 0;
+            int g = 0;
+            int b = 0;
+            int rOriginal = 0; 
+            int gOriginal = 0;
+            int bOriginal = 0;
+            
+            // convolve the mask
+            for (int j = -1*mask_radius; j <= mask_radius; j++) 
+                for (int k = -1*mask_radius; k <= mask_radius; k++) {
+                    int y = row + j; 
+                    int x = col + k;
 
                     if(y >= 0 && y < h && x >= 0 && x < w) {
                         int xy_r, xy_g, xy_b;
@@ -518,16 +623,16 @@ void GBNR(Image& img, int mask_radius, char const* output_file)
                         b += xy_b * mask[mask_radius+j][mask_radius+k]; 
 
                     }
-
-
-                    
-
             }
             r /= true_norm;
             g /= true_norm;
             b /= true_norm;
-
-            set_rgb(result, w, h, row, col, r, g, b);
+            get_rgb(pixels, w, h, row, col, rOriginal, gOriginal, bOriginal);
+            int rNew = 2 * rOriginal - r;
+            int gNew = 2 * gOriginal - g;
+            int bNew = 2 * bOriginal - b;
+            
+            set_rgb(result, w, h, row, col, rNew, gNew, bNew);
         }
     }
     memcpy((void*) pixels, (const void*) result, bytes); 
@@ -748,44 +853,6 @@ void MFNR_driver()
     MFNR(image, radius, out_c);
 }
 
-void GBNR_driver()
-{
-    printf("\nGaussian Blur Noise Removal Tool\n");
-    InitializeMagick(nullptr);
-    Image image;
-    
-    string in_str;
-    prompt("\nEnter the name of the image to process", in_str);
-    in_str = string("images/") + in_str;
-
-    char const* in_c = const_cast<char*>(in_str.c_str());
-
-    printf("Reading image from disk...\n");
-    try { 
-        image.read(in_c);
-    }
-    catch( Exception &error_ ) 
-    { 
-        printf("Could not read image ");
-        printf(in_c); 
-        printf("\nCaught exception:\n\t");
-        printf(error_.what());
-        printf("\n"); 
-        return;
-    }
-
-    string out_str;
-    prompt("\nEnter the desired name of the output image", out_str);
-    out_str = string("images/") + out_str;
-    char const* out_c = const_cast<char*>(out_str.c_str());
-
-
-    int mask_radius;
-    prompt("\nEnter the mask radius", mask_radius);
-
-    printf("\nRemoving Noise...\n");
-    GBNR(image, mask_radius, out_c);
-}
 
 void contrast_brightness_driver()
 {
@@ -863,6 +930,85 @@ void color_driver()
     colormaps(image, out_c, red, green, blue);
 }
 
+void blur_driver()
+{
+    printf("\nGaussian Blurring Tool\n");
+    InitializeMagick(nullptr);
+    Image image;
+    
+    string in_str;
+    prompt("\nEnter the name of the image to process", in_str);
+    in_str = string("images/") + in_str;
+
+    char const* in_c = const_cast<char*>(in_str.c_str());
+
+    printf("Reading image from disk...\n");
+    try { 
+        image.read(in_c);
+    }
+    catch( Exception &error_ ) 
+    { 
+        printf("Could not read image ");
+        printf(in_c); 
+        printf("\nCaught exception:\n\t");
+        printf(error_.what());
+        printf("\n"); 
+        return;
+    }
+
+    string out_str;
+    prompt("\nEnter the desired name of the output image", out_str);
+    out_str = string("images/") + out_str;
+    char const* out_c = const_cast<char*>(out_str.c_str());
+
+
+    int mask_radius;
+    prompt("\nEnter the mask radius", mask_radius);
+
+    printf("\nBlurring...\n");
+    blur(image, mask_radius, out_c);
+}
+
+void sharpen_driver()
+{
+    printf("\nSharpening Tool\n");
+    InitializeMagick(nullptr);
+    Image image;
+    
+    string in_str;
+    prompt("\nEnter the name of the image to process", in_str);
+    in_str = string("images/") + in_str;
+
+    char const* in_c = const_cast<char*>(in_str.c_str());
+
+    printf("Reading image from disk...\n");
+    try { 
+        image.read(in_c);
+    }
+    catch( Exception &error_ ) 
+    { 
+        printf("Could not read image ");
+        printf(in_c); 
+        printf("\nCaught exception:\n\t");
+        printf(error_.what());
+        printf("\n"); 
+        return;
+    }
+
+    string out_str;
+    prompt("\nEnter the desired name of the output image", out_str);
+    out_str = string("images/") + out_str;
+    char const* out_c = const_cast<char*>(out_str.c_str());
+
+
+    int mask_radius;
+    prompt("\nEnter the mask radius", mask_radius);
+
+    printf("\nSharpening...\n");
+    sharpen(image, mask_radius, out_c);
+}
+
+
 void test_driver()
 {
     printf("Reading image from disk...\n");
@@ -897,7 +1043,7 @@ int main(int argc, char **argv)
     while(run)
     {
         int tool = 0;
-        char const* str = "\nEnter an integer to select a tool: \n\t0 : Exit \n\t1 : Additive White Gaussian Noise \n\t2 : Salt & Pepper Noise\n\t3 : Median Filtering Noise Removal\n\t4 : Gaussian Blur Noise Removal\n\t5 : Contrast and Brightness Sliders\n\t6 : Colormap Tool\n";  // feel free to add more options for your tools
+        char const* str = "\nEnter an integer to select a tool: \n\t0 : Exit \n\t1 : Additive White Gaussian Noise \n\t2 : Salt & Pepper Noise\n\t3 : Median Filtering Noise Removal\n\t4 : Contrast and Brightness Sliders\n\t5 : Colormap Tool\n\t6 : Blurring\n\t7 : Sharpening\n";  // feel free to add more options for your tools
         prompt(str, tool);
         //printf("input %i\n", tool);
         switch(tool)
@@ -921,19 +1067,24 @@ int main(int argc, char **argv)
                 MFNR_driver();
                 break;
 
-            case 4 :
-                run = true;
-                GBNR_driver();
-                break;
-            
-            case 5:
+            case 4:
                 run = true;
                 contrast_brightness_driver();
                 break;
 
-            case 6:
+            case 5:
                 run = true;
                 color_driver();
+                break;
+
+            case 6:
+                run = true;
+                blur_driver();
+                break;
+
+            case 7:
+                run = true;
+                sharpen_driver();
                 break;
 
             default :
@@ -947,15 +1098,3 @@ int main(int argc, char **argv)
    //test_driver();
    return 0;
 }
-
-
-/*
-Jake:
-
-Additive White Gaussian Noise       CHECK
-Multiplicative/Speckle Noise        CHECK
-noise removal (Median Filtering)
-
-
-*/ 
-
